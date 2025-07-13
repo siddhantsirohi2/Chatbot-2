@@ -24,7 +24,6 @@ load_dotenv()
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-load_dotenv()
 
 # Correct environment variable name for OpenAI API key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")

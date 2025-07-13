@@ -22,7 +22,7 @@ with st.sidebar:
             st.session_state.jwt = None
             st.session_state.username = None
             st.session_state.chat_history = []
-            st.experimental_rerun()
+            st.rerun()
     else:
         auth_tab = st.radio("Account", ["Log In", "Sign Up"])
         if auth_tab == "Log In":
@@ -37,7 +37,7 @@ with st.sidebar:
                         st.session_state.jwt = token
                         st.session_state.username = username
                         st.success("Logged in!")
-                        st.experimental_rerun()
+                        st.rerun()
                     else:
                         st.error(resp.json().get("detail", "Login failed."))
         else:
@@ -85,7 +85,7 @@ if st.session_state.jwt:
                 if resp.status_code == 200:
                     answer = resp.json()["answer"]
                     st.session_state.chat_history.append((user_input, answer))
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error(resp.json().get("detail", "Error getting answer."))
 else:

@@ -1,18 +1,40 @@
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
-from typing import Dict
 from passlib.context import CryptContext
 import jwt
 from datetime import datetime, timedelta
 import os
 from app22 import get_answer
+from sqlalchemy import create_engine, Column, String, Integer
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
 
-# FastAPI app
+# --- Database Setup ---
+DATABASE_URL = "sqlite:///./users.db"
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+class UserDB(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+
+Base.metadata.create_all(bind=engine)
+
+# Dependency to get a DB session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# --- FastAPI App ---
 app = FastAPI()
 
-# Allow CORS for frontend (e.g., Streamlit)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,16 +43,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Password hashing
+# --- Security ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# Secret key for JWT
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "a_very_secret_key")  # Fallback for safety
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
-
-# In-memory user store (replace with DB in production)
-users_db: Dict[str, Dict] = {}
 
 def get_password_hash(password):
     return pwd_context.hash(password)
@@ -54,7 +71,7 @@ def decode_access_token(token: str):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-# Pydantic models
+# --- Pydantic Models ---
 class UserSignup(BaseModel):
     username: str
     password: str
@@ -76,30 +93,41 @@ class AskResponse(BaseModel):
     source_documents: list
     keywords: list
 
-def get_current_user(request: Request):
+# --- Authentication ---
+def get_current_user(request: Request, db: Session = Depends(get_db)):
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    
     token = auth_header.split(" ")[1]
     payload = decode_access_token(token)
     username = payload.get("sub")
-    if username not in users_db:
+    
+    user = db.query(UserDB).filter(UserDB.username == username).first()
+    if user is None:
         raise HTTPException(status_code=401, detail="User not found")
-    return username
+    return user.username
 
+# --- API Endpoints ---
 @app.post("/signup")
-def signup(user: UserSignup):
-    if user.username in users_db:
+def signup(user: UserSignup, db: Session = Depends(get_db)):
+    db_user = db.query(UserDB).filter(UserDB.username == user.username).first()
+    if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
+    
     hashed_password = get_password_hash(user.password)
-    users_db[user.username] = {"username": user.username, "hashed_password": hashed_password}
+    new_user = UserDB(username=user.username, hashed_password=hashed_password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
     return {"msg": "User created successfully"}
 
 @app.post("/login", response_model=Token)
-def login(user: UserLogin):
-    db_user = users_db.get(user.username)
-    if not db_user or not verify_password(user.password, db_user["hashed_password"]):
+def login(user: UserLogin, db: Session = Depends(get_db)):
+    db_user = db.query(UserDB).filter(UserDB.username == user.username).first()
+    if not db_user or not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
+    
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
