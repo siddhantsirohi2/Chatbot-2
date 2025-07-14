@@ -11,7 +11,7 @@ st.set_page_config(
 )
 
 # --- API & SESSION STATE ---
-API_URL = "http://localhost:8000"
+API_URL = "http://backend:8000"
 
 # Initialize session state variables
 if "jwt" not in st.session_state:
@@ -94,7 +94,7 @@ if st.session_state.jwt:
 
         # Chat input at the bottom
         with st.form("chat_form", clear_on_submit=True):
-            user_input = st.text_area("Type your question and press Send", key="chat_input", height=50)
+            user_input = st.text_area("Type your question and press Send", key="chat_input", height=68)
             send = st.form_submit_button("Send")
             if send and user_input.strip():
                 headers = {"Authorization": f"Bearer {st.session_state.jwt}"}

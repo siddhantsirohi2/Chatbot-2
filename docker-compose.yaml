@@ -1,17 +1,23 @@
 # docker-compose.yml
-version: '3.8'
 
 services:
-  mongodb:
-    image: mongo:latest
-    container_name: my-project-mongodb
+  backend:
+    build: ./backend
+    container_name: rag-backend
     ports:
-      - "27017:27017"
+      - "8000:8000"
     volumes:
-      - mongodb_data:/data/db
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: user
-      MONGO_INITDB_ROOT_PASSWORD: password
+      - ./backend:/app
+      - ./backend/faiss_index_langchain:/app/faiss_index_langchain # Mount FAISS index
+    env_file:
+      - ./backend/.env
 
-volumes:
-  mongodb_data:
+  frontend:
+    build: .
+    container_name: rag-frontend
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+    depends_on:
+      - backend
