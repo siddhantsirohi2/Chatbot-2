@@ -5,7 +5,9 @@ from passlib.context import CryptContext
 import jwt
 from datetime import datetime, timedelta
 import os
-from app22 import get_answer
+import uuid
+import asyncio
+from app22 import get_answer_async
 from sqlalchemy import create_engine, Column, String, Integer
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -83,10 +85,11 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    session_id: str
 
 class AskRequest(BaseModel):
     query: str
-    session_id: str = "default"
+    session_id: str
 
 class AskResponse(BaseModel):
     answer: str
@@ -128,10 +131,15 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     if not db_user or not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
     
-    access_token = create_access_token(data={"sub": user.username})
-    return {"access_token": access_token, "token_type": "bearer"}
+    # Generate unique session ID for this login
+    session_id = str(uuid.uuid4())
+    
+    # Create access token with session_id included
+    access_token = create_access_token(data={"sub": user.username, "session_id": session_id})
+    return {"access_token": access_token, "token_type": "bearer", "session_id": session_id}
 
 @app.post("/ask", response_model=AskResponse)
-def ask(request: AskRequest, username: str = Depends(get_current_user)):
-    result = get_answer(request.query, session_id=request.session_id)
+async def ask(request: AskRequest, username: str = Depends(get_current_user)):
+    # Use the async version of get_answer for better performance
+    result = await get_answer_async(request.query, session_id=request.session_id)
     return AskResponse(**result)
